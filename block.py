@@ -138,6 +138,8 @@ class P2P(object):
 	    			self.receive_block(event.data)
 	    		if(event.type == "bblk"):
 	    			self.broadcast_block()
+			if self.events.empty():
+				return
 	    		event_time, event = self.events.get()
 	    	self.events.put((event_time, event))
 
