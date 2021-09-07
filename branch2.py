@@ -55,7 +55,7 @@ class P2P(object):
         num_fast = math.floor(num_peers*z/100)
         count_fast = 0
         self.T = Tx
-        self.delays = random_delays(minm, maxm, self.num_peers)
+        #self.delays = random_delays(minm, maxm, self.num_peers)
         for i in range(1, num_peers+1):
             if count_fast<num_fast:
                 self.peers.append(self.Peer(i,1, self))
@@ -67,7 +67,6 @@ class P2P(object):
             self.peer_graph.add_vertex(peer.p_id, peer.fast_slow)
             
         self.adj_mat = self.peer_graph.generate_random_graph()
-        print(self.adj_mat)
     
     def genesis(self):
         self.genesis_block = self.Block([], 0, -1)
@@ -179,14 +178,20 @@ class P2P(object):
             txn = self.p2p.Transaction(t_id, self.p_id, peer_num, amt)
             self.p2p.transaction_map[txn.t_id] = txn
             # print(str(t_id)+": "+str(self.p_id)+" pays "+str(peer_num)+" "+str(amt[0])+" coins")
-            for peer in self.p2p.peers:
-              if(peer.p_id != self.p_id):
-                  event =  self.p2p.Event("rtxn", txn.t_id)
-                  peer.add_event(time+self.p2p.delays[self.p_id-1][peer.p_id-1], event)
+            for i in range(self.p2p.num_peers):
+                if self.p2p.adj_mat[self.p_id-1][i]>0:
+                    event = self.p2p.Event("rtxn", txn.t_id)
+                    if(self.p2p.peers[i].fast_slow==1 and self.fast_slow==1):
+                        cij = 100000000
+                    else:
+                        cij = 5000000
+                    delay = time+self.p2p.adj_mat[self.p_id-1][i]+(1000/cij)+np.random.exponential(96000/cij)
+                    self.p2p.peers[i].add_event(delay, event)
 
         def receive_txn(self, t_id, time):
             # if self.p2p.peers[self.p2p.transaction_map[t_id].payer].coins >= self.p2p.transaction_map[t_id].amt:
-            self.pending_txs.append(t_id)
+            if t_id not in self.pending_txs:
+                self.pending_txs.append(t_id)
             # print("pid %d received transaction with TxnID: %d at time: %d" % (
             #     self.p_id, t_id, time))
             # else:
@@ -287,7 +292,7 @@ class P2P(object):
                     if(peer.p_id != self.p_id):
                         event = self.p2p.Event("rblk", b_id)
                         peer.add_event(
-                            time+self.p2p.delays[self.p_id-1][peer.p_id-1], event)
+                            time+self.p2p.adj_mat[self.p_id-1][peer.p_id-1], event)
                 self.receive_block(b_id, time)
 
 
@@ -372,7 +377,7 @@ class P2P(object):
             
             for i in range(self.num_vertices-1):
                 p_xy = np.random.uniform(10, 500)
-                self.add_edge(i, i+1, p_xy)
+                self.add_edge(i+1, i+2, p_xy)
                 self.adj_matrix[i][i+1] = p_xy
                 self.adj_matrix[i+1][i] = p_xy
                 
@@ -381,7 +386,7 @@ class P2P(object):
                 y = random.randint(0, self.num_vertices-1)
                 p_xy = np.random.uniform(10, 500)
                 if(x != y):
-                    self.add_edge(x, y, p_xy)
+                    self.add_edge(x+1, y+1, p_xy)
                     self.adj_matrix[x][y] = p_xy
                     self.adj_matrix[y][x] = p_xy
                 else:
