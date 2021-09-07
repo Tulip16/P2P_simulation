@@ -68,6 +68,7 @@ class P2P(object):
             self.peer_graph.add_vertex(peer.p_id, peer.fast_slow)
             
         self.adj_mat = self.peer_graph.generate_random_graph()
+        print(self.adj_mat)
 
         # tree structures for simulation visualisation
         self.visual_trees = []
@@ -92,11 +93,11 @@ class P2P(object):
         self.genesis()
         time = 0
         clk_time = 1
-        for i in range(10*sim_time):
+        for i in range(sim_time):
             for peer in self.peers:
                 peer.handle_events(time)
             time += clk_time
-            sleep_time.sleep(0.001)
+            #sleep_time.sleep(0.001)
 
     # contains transaction info
     class Transaction(object):
@@ -245,7 +246,7 @@ class P2P(object):
             self.events.put((time, event))
 
         def generate_txn(self, t_id, time):
-            if self.p2p.check1:
+            if self.p2p.check1 and t_id=="000001000001":
                 print("pID: %d generated txn with TxnID: %s at time: %f" %
                       (self.p_id, t_id, time))
             # choose a random peer
@@ -261,7 +262,7 @@ class P2P(object):
             txn = self.p2p.Transaction(t_id, self.p_id, peer_num, amt)
             self.p2p.transaction_map[txn.t_id] = txn
 
-            if self.p2p.check1:
+            if self.p2p.check1 and t_id=="000001000001":
                 print(txn.txn_string)
             # receive own txn
             self.receive_txn(t_id, time, self.p_id)
@@ -270,10 +271,10 @@ class P2P(object):
             self.add_next_transaction(time)
 
         def receive_txn(self, t_id, time, sender):
-            if self.p2p.check1:
-                print("pID: %d received txn with TxnID: %s at time: %f from pID: %d" %
-                      (self.p_id, t_id, time, sender))
             if t_id not in self.pending_txs:
+                if self.p2p.check1 and t_id=="000001000001":
+                    print("pID: %d received txn with TxnID: %s at time: %f from pID: %d" %
+                          (self.p_id, t_id, time, sender))
                 self.pending_txs.append(t_id)
                 for i in range(self.p2p.num_peers):
                     if self.p2p.adj_mat[self.p_id-1][i]>0 and i+1 != sender:
@@ -287,9 +288,23 @@ class P2P(object):
                         self.p2p.peers[i].add_event(delay, event)
 
         def receive_block(self, b_id, time, sender):
-            if self.p2p.check2:
+            block = self.p2p.block_map[b_id]
+            # check if parent exists, return false otherwise
+            try:
+                parent_block_node = self.block_node_map[block.prev_b_id]
+            except:
+                if self.p2p.check2 and b_id=="000001000001":
+                    print("Previous block has not arrived!")
+                return
+
+            for child in parent_block_node.children:
+                if(child.b_id == b_id):
+                    return
+
+            if self.p2p.check2 and b_id=="000001000001":
                 print("pID: %d received block with BlkID: %s at time: %f from pID: %d" %
                       (self.p_id, b_id, time, sender))
+
             if self.verify_block(b_id, time): # if block is verified
                 # remove block txns from pending list
                 for txn in self.p2p.block_map[b_id].txns:
@@ -312,30 +327,16 @@ class P2P(object):
                 if is_longest:
                     self.create_block(time)
             else:
-                if self.p2p.check2:
+                if self.p2p.check2 and b_id=="000001000001":
                     print("INVALID BLOCK!!")
                 pass
 
         def verify_block(self, b_id, time):
-            if self.p2p.check2:
+            if self.p2p.check2 and b_id=="000001000001":
                 print("pID: %d verifying BlkID: %s at time: %f" % (
                     self.p_id, b_id, time))
             block = self.p2p.block_map[b_id]
-
-            # check if parent exists, return false otherwise
-            try:
-                parent_block_node = self.block_node_map[block.prev_b_id]
-            except:
-                if self.p2p.check2:
-                    print("Previous block has not arrived!")
-                return False
-
-            for child in parent_block_node.children:
-                if(child.b_id == b_id):
-                    if self.p2p.check2:
-                        print("Block received earlier!")
-                    return False
-
+            parent_block_node = self.block_node_map[block.prev_b_id]
             pay_sum = [] # stores total amount payed by each peer in all txns in this block 
             for i in range(self.p2p.num_peers):
                 pay_sum.append(0)
@@ -346,12 +347,12 @@ class P2P(object):
                 payer_id = self.p2p.transaction_map[t_id].payer
                 pay_sum[payer_id-1] += amt
                 if parent_block_node.accounts[payer_id-1] < pay_sum[payer_id-1]:
-                    if self.p2p.check2:
+                    if self.p2p.check2 and b_id=="000001000001":
                         print("INVALID - pID: %d trying to pay more than its balance of %d" % (
                            payer_id, parent_block_node.accounts[payer_id-1]))
                     return False
 
-            if self.p2p.check2:
+            if self.p2p.check2 and b_id=="000001000001":
                 print("VERIFIED!!")
 
             return True # iff all checks passed
@@ -397,14 +398,14 @@ class P2P(object):
                 txns, b_id, prev_b_id, self.p_id)
             self.p2p.block_map[b_id] = current_block
 
-            if self.p2p.check2:
-                print("pID: %d started mining block with BlkID: %s at time: %f" % (self.p_id,
-                    b_id, time))
-
             # generate POW time
             # !! change
             tk = generate_POW_time(Tk[self.p_id-1])
             # !!
+
+            if self.p2p.check2 and b_id=="000001000001":
+                print("pID: %d started mining block with BlkID: %s at time: %f, should be broadcast at %f" % (self.p_id,
+                    b_id, time, time+tk))
 
             # add broadcast event at POW time delay to own events queue
             event = self.p2p.Event("bblk", b_id, self.p_id)
@@ -414,12 +415,16 @@ class P2P(object):
         def broadcast_block(self, b_id, time):
             current_block = self.p2p.block_map[b_id]
             if self.longest[0] == current_block.prev_b_id:
-                if self.p2p.check2:
+                if self.p2p.check2 and b_id=="000001000001":
                     print("pID: %d broadcasted BlkID: %s at time %f" % (
                         self.p_id, b_id, time))
 
                 # receive own block
                 self.receive_block(b_id, time, self.p_id)
+            else:
+                if self.p2p.check2 and b_id=="000001000001":
+                    print("pID: %d : BlkID: %s not on longest chain at time %f" % (
+                            self.p_id, b_id, time))
 
 
         # event handler, shedules the event to be executed by popping it from the events queue,
@@ -510,43 +515,39 @@ class P2P(object):
         def get_vertices(self):
             return self.vertices_dict.keys() 
         
-        # helper function for generate_random_graph
-        def _generate_random_graph(self, n):
-            if (self.is_complete):
-                return
-            if len(self.in_graph)==self.num_vertices:
-                self.is_complete = True
-                for i in range(self.num_vertices):
-                    for j in range(self.num_vertices):
-                        if(self.adj_matrix[i][j]==0 and i!=j):
-                            flag = np.random.randint(0, 2)
-                            if(flag==1):
-                                p_xy = np.random.uniform(10, 500)
-                                self.add_edge(i+1, j+1, p_xy)
-                                self.adj_matrix[i][j] = p_xy
-                                self.adj_matrix[i][j] = p_xy
-                return
-
-            num_c = np.random.randint(1, self.num_vertices)
-            children = np.random.randint(1, self.num_vertices+1, size=num_c)
-            for c in children:
-                if n!=c:
-                    p_xy = np.random.uniform(10, 500)
-                    self.add_edge(n, c, p_xy)
-                    self.adj_matrix[n-1][c-1] = p_xy
-                    self.adj_matrix[c-1][n-1] = p_xy
-                    self.in_graph.add(c)
-            for c in children:
-                if (n!=c):
-                    self._generate_random_graph(c)
-
         # creates a connected graph of peers in which each peer is connected to a random number of peers
         def generate_random_graph(self):
             self.adj_matrix = np.zeros(shape=(self.num_vertices, self.num_vertices), dtype=np.int32)
-            r = np.random.randint(1, self.num_vertices+1)
-            self.in_graph.add(r)
-            self._generate_random_graph(r)
-            
+            cg = np.eye(self.num_vertices, dtype=np.int32)
+            con = np.ones(shape=(self.num_vertices, self.num_vertices), dtype=np.int32)
+            while not ((cg == con).all()):
+                i = np.random.randint(0, self.num_vertices)
+                j = np.random.randint(0, self.num_vertices)
+                if(i!=j):
+                    self.adj_matrix[i][j] = 1
+                    self.adj_matrix[j][i] = 1
+                    cg[i][j] = 1
+                    cg[j][i] = 1
+                    for x in range(self.num_vertices):
+                        if(cg[j][x] == 1):
+                            cg[i][x] =1 
+                        if(cg[i][x] == 1):
+                            cg[j][x] = 1
+            for i in range(self.num_vertices):
+                for j in range(i, self.num_vertices):
+                    if (self.adj_matrix[i][j] == 1):
+                        pxy = np.random.uniform(10, 500)
+                        self.adj_matrix[i][j] = pxy
+                        self.adj_matrix[j][i] = pxy
+
+            for i in range(self.num_vertices):
+                for j in range(i+1, self.num_vertices):
+                    if (self.adj_matrix[i][j] == 0):
+                        prob = np.random.randint(0, 2)
+                        if(prob):
+                            pxy = np.random.uniform(10, 500)
+                            self.adj_matrix[i][j] = pxy
+                            self.adj_matrix[j][i] = pxy
             return self.adj_matrix
 
 
@@ -571,9 +572,13 @@ for i in range(num_peers):
 
 print("Track txn generation, loopless forwarding and latencies?: (Y/N)", end="")
 check1 = input()
+if check1=="Y":
+print("Will follow TxnID 000001000001")
 
 print("Track blk creation, broadcast, verification, fork resolution?: (Y/N)", end="")
 check2 = input()
+if check2=="Y":
+    print("Will follow BlkID 000001000001")
 
 p2p = P2P(num_peers, z, Tx, Tk)
 p2p.run(sim_time, check1=="Y", check2=="Y")
