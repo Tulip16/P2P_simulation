@@ -91,12 +91,12 @@ class P2P(object):
         self.check2 = check2
         self.genesis()
         time = 0
-        clk_time = 0.1
+        clk_time = 1
         for i in range(10*sim_time):
             for peer in self.peers:
                 peer.handle_events(time)
             time += clk_time
-            sleep_time.sleep(0.0001)
+            sleep_time.sleep(0.001)
 
     # contains transaction info
     class Transaction(object):
@@ -428,7 +428,7 @@ class P2P(object):
             if self.events.empty():
                 return
             event_time, event = self.events.get()
-            while math.ceil(event_time*10) == math.ceil(time*10):
+            while math.ceil(event_time) == math.ceil(time):
                 if(event.type == "gtxn"):
                     self.generate_txn(event.data, event_time)
                 if(event.type == "rtxn"):
@@ -516,17 +516,15 @@ class P2P(object):
                 return
             if len(self.in_graph)==self.num_vertices:
                 self.is_complete = True
-                if(self.num_vertices*(self.num_vertices-1)/2 - self.num_edges)>0:
-                    num_iter = np.random.randint(0, self.num_vertices*(self.num_vertices-1)/2 - self.num_edges+1)
-                    for i in range(num_iter):
-                        x = random.randint(0, self.num_vertices)
-                        y = random.randint(0, self.num_vertices)
-                        print(self.num_vertices)
-                        p_xy = np.random.uniform(10, 500)
-                        if(x != y):
-                            self.add_edge(x+1, y+1, p_xy)
-                            self.adj_matrix[x][y] = p_xy
-                            self.adj_matrix[y][x] = p_xy
+                for i in range(self.num_vertices):
+                    for j in range(self.num_vertices):
+                        if(self.adj_matrix[i][j]==0 and i!=j):
+                            flag = np.random.randint(0, 2)
+                            if(flag==1):
+                                p_xy = np.random.uniform(10, 500)
+                                self.add_edge(i+1, j+1, p_xy)
+                                self.adj_matrix[i][j] = p_xy
+                                self.adj_matrix[i][j] = p_xy
                 return
 
             num_c = np.random.randint(1, self.num_vertices)
