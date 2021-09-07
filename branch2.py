@@ -192,12 +192,15 @@ class P2P(object):
             # if self.p2p.peers[self.p2p.transaction_map[t_id].payer].coins >= self.p2p.transaction_map[t_id].amt:
             if t_id not in self.pending_txs:
                 self.pending_txs.append(t_id)
-            # print("pid %d received transaction with TxnID: %d at time: %d" % (
-            #     self.p_id, t_id, time))
-            # else:
-            #     pass
-            #     print("INVALID: pid %d received transaction with TxnID: %d at time: %d" % (
-            #         self.p_id, t_id, time))
+                for i in range(self.p2p.num_peers):
+                    if self.p2p.adj_mat[self.p_id-1][i]>0:
+                        event = self.p2p.Event("rtxn", txn.t_id)
+                        if(self.p2p.peers[i].fast_slow==1 and self.fast_slow==1):
+                            cij = 100000000
+                        else:
+                            cij = 5000000
+                        delay = time+self.p2p.adj_mat[self.p_id-1][i]+(1000/cij)+np.random.exponential(96000/cij)
+                        self.p2p.peers[i].add_event(delay, event)
 
         def receive_block(self, b_id, time):
             print("pid %d received block with BlkID: %d at time: %d" %
