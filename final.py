@@ -444,7 +444,8 @@ class P2P(object):
                 event_time, event = self.events.get()
             self.events.put((event_time, event))
 
-
+    # for connecting peers
+    #class to convert each peer into graph node with peer_id and its fast_slow
     class Vertex(object):
         def __init__(self, vertex, fast_slow):
             self.fast_slow = fast_slow
@@ -453,40 +454,47 @@ class P2P(object):
             
         def __str__(self) -> str:
             return str(self.id) + ' connected to: ' + str([x.id for x in self.neighbours])
-            
-        def add_neighbour(self, neighbour, weight):
-            self.neighbours[neighbour] = weight
         
+        #add the adjacent peers of the peer corresponding to this vertex
+        def add_neighbour(self, neighbour, weight):
+            if neighbour not in self.neighbours.keys():
+                self.neighbours[neighbour] = weight
+
+        #get the adjacent peers of the peer corresponding to this vertex
         def get_connections(self):
             return self.neighbours.keys()
         
         def get_id(self):
             return self.id
-        
+
+        #get the weight of edge between given neughbour and the peer corresponding to this vertex
         def get_weight(self, neighbor):
             return self.neighbours[neighbor]
                               
         def __repr__(self) -> str:
             return str(self.neighbours)
         
-         
-    # for connecting peers
+    # graph of peers
     class Graph(object):
         def __init__(self, p2p):
             self.vertices_dict = {}
             self.num_vertices = 0
             self.adj_matrix = None
             self.p2p = p2p
+            self.num_edges = 0
+            self.in_graph = set()
             
         def __iter__(self):
             return iter(self.vertices_dict.values())
         
+        #add vertex to the graph
         def add_vertex(self, node, fast_slow):
             self.num_vertices = self.num_vertices + 1
             new_vertex = self.p2p.Vertex(node, fast_slow)
             self.vertices_dict[node] = new_vertex
             return new_vertex
-                    
+        
+        #add edge to the graph          
         def add_edge(self, vertex_from, vertex_to, weight):
             if vertex_from not in self.vertices_dict:
                 self.add_vertex(vertex_from, 0)
@@ -495,30 +503,36 @@ class P2P(object):
                 self.add_vertex(vertex_to, 0)
             
             self.vertices_dict[vertex_from].add_neighbour(self.vertices_dict[vertex_to], weight)
-            # self.vertices_dict[vertex_to].add_neighbour(self.vertices_dict[vertex_from], weight)  
-            
+            self.num_edges += 1
+        
+        #get graph vertices  
         def get_vertices(self):
             return self.vertices_dict.keys() 
-            
+        
+        # helper function for generate_random_graph
+        def _generate_random_graph(self, n):
+            if len(self.in_graph)==self.num_vertices:
+                return
+
+            num_c = np.random.randint(1, self.num_vertices)
+            children = np.random.randint(1, self.num_vertices+1, size=num_c)
+            for c in children:
+                if n!=c:
+                    p_xy = np.random.uniform(10, 500)
+                    self.add_edge(n, c, p_xy)
+                    self.adj_matrix[n-1][c-1] = p_xy
+                    self.adj_matrix[c-1][n-1] = p_xy
+                    self.in_graph.add(c)
+            for c in children:
+                if n!=c:
+                    self._generate_random_graph(c)
+
+        # creates a connected graph of peers in which each peer is connected to a random number of peers
         def generate_random_graph(self):
             self.adj_matrix = np.zeros(shape=(self.num_vertices, self.num_vertices), dtype=np.int32)
-            
-            for i in range(self.num_vertices-1):
-                p_xy = np.random.uniform(10, 500)
-                self.add_edge(i+1, i+2, p_xy)
-                self.adj_matrix[i][i+1] = p_xy
-                self.adj_matrix[i+1][i] = p_xy
-                
-            for i in range(self.num_vertices):
-                x = random.randint(0, self.num_vertices-1)
-                y = random.randint(0, self.num_vertices-1)
-                p_xy = np.random.uniform(10, 500)
-                if(x != y):
-                    self.add_edge(x+1, y+1, p_xy)
-                    self.adj_matrix[x][y] = p_xy
-                    self.adj_matrix[y][x] = p_xy
-                else:
-                    pass
+            r = np.random.randint(1, self.num_vertices+1)
+            self.in_graph.add(r)
+            self._generate_random_graph(r)
             
             return self.adj_matrix
 
