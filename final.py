@@ -63,11 +63,11 @@ class P2P(object):
             count_fast += 1
 
         # setting the connectivity graph for the network
-            self.peer_graph = self.Graph(self)
-            for peer in self.peers:
-                self.peer_graph.add_vertex(peer.p_id, peer.fast_slow)
-                
-            self.adj_mat = self.peer_graph.generate_random_graph()
+        self.peer_graph = self.Graph(self)
+        for peer in self.peers:
+            self.peer_graph.add_vertex(peer.p_id, peer.fast_slow)
+            
+        self.adj_mat = self.peer_graph.generate_random_graph()
 
         # tree structures for simulation visualisation
         self.visual_trees = []
@@ -512,7 +512,7 @@ class P2P(object):
         
         # helper function for generate_random_graph
         def _generate_random_graph(self, n):
-            if (not self.is_complete):
+            if (self.is_complete):
                 return
             if len(self.in_graph)==self.num_vertices:
                 self.is_complete = True
