@@ -483,6 +483,7 @@ class P2P(object):
             self.p2p = p2p
             self.num_edges = 0
             self.in_graph = set()
+            self.is_complete = False
             
         def __iter__(self):
             return iter(self.vertices_dict.values())
@@ -511,7 +512,21 @@ class P2P(object):
         
         # helper function for generate_random_graph
         def _generate_random_graph(self, n):
+            if (not self.is_complete):
+                return
             if len(self.in_graph)==self.num_vertices:
+                self.is_complete = True
+                if(self.num_vertices*(self.num_vertices-1)/2 - self.num_edges)>0:
+                    num_iter = np.random.randint(0, self.num_vertices*(self.num_vertices-1)/2 - self.num_edges+1)
+                    for i in range(num_iter):
+                        x = random.randint(0, self.num_vertices)
+                        y = random.randint(0, self.num_vertices)
+                        print(self.num_vertices)
+                        p_xy = np.random.uniform(10, 500)
+                        if(x != y):
+                            self.add_edge(x+1, y+1, p_xy)
+                            self.adj_matrix[x][y] = p_xy
+                            self.adj_matrix[y][x] = p_xy
                 return
 
             num_c = np.random.randint(1, self.num_vertices)
@@ -524,7 +539,7 @@ class P2P(object):
                     self.adj_matrix[c-1][n-1] = p_xy
                     self.in_graph.add(c)
             for c in children:
-                if n!=c:
+                if (n!=c):
                     self._generate_random_graph(c)
 
         # creates a connected graph of peers in which each peer is connected to a random number of peers
