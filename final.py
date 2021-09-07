@@ -334,7 +334,7 @@ class P2P(object):
                 if(child.b_id == b_id):
                     if self.p2p.check2:
                         print("Block received earlier!")
-                        return False
+                    return False
 
             pay_sum = [] # stores total amount payed by each peer in all txns in this block 
             for i in range(self.p2p.num_peers):
