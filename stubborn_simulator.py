@@ -549,24 +549,28 @@ class P2P(object):
                     print("pID: %d : BlkID: %s not on longest chain at time %f" % (
                             self.p_id, b_id, time))
 
+        #destroy the tree with its root as the given block
         def destroy_tree(self, block_tree_node):
             for child in block_tree_node.children:
                 self.destroy_tree(child)
             old_tree_node = self.stubborn_block_node_map.pop(block_tree_node.b_id)
             del old_tree_node
 
+        #update all branch lengths
         def clean_up(self, block_tree_node):
             for child in block_tree_node.children:
                 child.length -= 1
                 self.clean_up(child)
 
 
+        #find the head of the longest branch of the hidden tree
         def find_earliest_block(self):
             for child in self.stubborn_block_tree_root.children:
                 if self.contains_longest(child):
                     return child.b_id
             return -1
 
+        #find if the given node is the leaf of a longest chain
         def contains_longest(self, block_tree_node):
             if block_tree_node.b_id in self.stubborn_longest:
                 return True
@@ -576,7 +580,7 @@ class P2P(object):
 
             return False
 
-
+        #send the received alert to its neighbours
         def send_alert(self, sender, time, b_id):
             for i in range(self.p2p.num_peers):
                 if self.p2p.stubborn_adj_mat[self.p_id-1][i]>0 and i+1 != sender:
@@ -586,7 +590,7 @@ class P2P(object):
                     delay = time+(self.p2p.stubborn_adj_mat[self.p_id-1][i]+(msg_size/cij)+np.random.exponential(96/cij))
                     self.p2p.peers[i].add_event(delay, event)
 
-
+        #stubborn miner receives alert that honest mines have mined a block ans sends this alert to its neighours
         def receive_alert(self, sender, time, b_id):
             if b_id == self.latest_alert_b_id:
                 return
