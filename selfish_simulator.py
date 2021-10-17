@@ -40,7 +40,7 @@ class CompressNode(object):
 
 # contains all the data of the P2P network
 class P2P(object):
-    def __init__(self, num_peers, Tx, Tk, Tk_stubborn, num_stubborn):
+    def __init__(self, num_peers, Tx, Tk, Tk_selfish, num_selfish):
         self.transaction_map = {} # t_id to transaction info mapping
         self.block_map = {} # b_id to block info mapping
         self.num_peers = num_peers # number of peers in the network
@@ -48,45 +48,45 @@ class P2P(object):
         self.genesis_block = None # created and set for all peers at the start of the simulation
         self.check1 = False
         self.check2 = False
-        self.num_stubborn = num_stubborn
+        self.num_selfish = num_selfish
 
-        num_fast = math.floor((num_peers-num_stubborn)*50/100)
+        num_fast = math.floor((num_peers-num_selfish)*50/100)
         count_fast = 0
         self.Tx = Tx
 
-        # adding slow and fast peers to the network after checking if they are stubborn
-        for i in range(1, num_peers-num_stubborn+1):
+        # adding slow and fast peers to the network after checking if they are selfish
+        for i in range(1, num_peers-num_selfish+1):
             if count_fast<num_fast:
                 self.peers.append(self.Peer(i,'fast', self, False, Tk[i-1]))
             else:
                 self.peers.append(self.Peer(i,'slow', self, False, Tk[i-1]))
             count_fast += 1
 
-        for i in range(num_peers-num_stubborn+1, num_peers+1):
-            self.peers.append(self.Peer(i,'fast', self, True, Tk_stubborn[i-(num_peers-num_stubborn+1)]))
+        for i in range(num_peers-num_selfish+1, num_peers+1):
+            self.peers.append(self.Peer(i,'fast', self, True, Tk_selfish[i-(num_peers-num_selfish+1)]))
                 
         # setting the connectivity graph for the network
         self.peer_graph = self.Graph(self)
         for peer in self.peers:
             self.peer_graph.add_vertex(peer.p_id, peer.fast_slow)
             
-        self.adj_mat, self.stubborn_adj_mat = self.peer_graph.generate_random_graph()
+        self.adj_mat, self.selfish_adj_mat = self.peer_graph.generate_random_graph()
 
         # tree structures for simulation visualisation
         self.visual_trees = []
         for i in range(num_peers):
             self.visual_trees.append(Tree())
 
-        self.stubborn_visual_trees = []
+        self.selfish_visual_trees = []
         for i in range(num_peers):
-            self.stubborn_visual_trees.append(Tree())
+            self.selfish_visual_trees.append(Tree())
 
     
     # creates genesis block with id = 0*12, adds to the start of block chain trees of all peers
     def genesis(self):
         for i in range(self.num_peers):
             self.visual_trees[i].create_node("(b_id: 000000000000, time: 0)", "000000000000", data=CompressNode())
-            self.stubborn_visual_trees[i].create_node("(b_id: 000000000000, time: 0)", "000000000000", data=CompressNode())
+            self.selfish_visual_trees[i].create_node("(b_id: 000000000000, time: 0)", "000000000000", data=CompressNode())
         
         self.genesis_block = self.Block([], "000000000000", -1, 0, False)
         self.block_map["000000000000"] = self.genesis_block
@@ -152,7 +152,7 @@ class P2P(object):
 
     # contains peer info
     class Peer(object):
-        def __init__(self, p_id, fast_slow, p2p, stubborn, Tk):
+        def __init__(self, p_id, fast_slow, p2p, selfish, Tk):
             self.p_id = p_id
             self.pending_txs = [] # txns received or created but not yet added in any block 
             self.events = PriorityQueue() # events queue
@@ -161,33 +161,33 @@ class P2P(object):
             self.p2p = p2p # p2p network to which this peer belongs
             self.fast_slow = fast_slow # fast or slow
             self.block_tree_root = self.p2p.BlockTree("000000000000", 1, self) # root of the block chain tree at this peer
-            self.stubborn = stubborn
+            self.selfish = selfish
             self.Tk = Tk
             self.latest_alert_b_id = None
-            # root of the hidden tree for a stubborn peer starting at the shared point b/w hidden and common trees
-            if self.stubborn:
-                self.stubborn_block_tree_root = self.p2p.BlockTree("000000000000", 1, self) 
+            # root of the hidden tree for a selfish peer starting at the shared point b/w hidden and common trees
+            if self.selfish:
+                self.selfish_block_tree_root = self.p2p.BlockTree("000000000000", 1, self) 
             else:
-                self.stubborn_block_tree_root = None
+                self.selfish_block_tree_root = None
 
             # setting default number of bitcoins with the peers to 0 in the beginning
             for peer_num in range(self.p2p.num_peers):
                 self.block_tree_root.accounts.append(0)
-                if self.stubborn:
-                    self.stubborn_block_tree_root.accounts.append(0)
+                if self.selfish:
+                    self.selfish_block_tree_root.accounts.append(0)
             # !!
             self.longest = ["000000000000"] # list of bids of blocks at the end of longest chains of the block tree at this peer
-            if self.stubborn:
-                self.stubborn_longest = ["000000000000"]
+            if self.selfish:
+                self.selfish_longest = ["000000000000"]
             else:
-                self.stubborn_longest = None
+                self.selfish_longest = None
             self.block_node_map = {} # block id to block node mapping for this peer (different for different peers
             # as the blcok chain tree for each node differs)
             self.block_node_map["000000000000"] = self.block_tree_root # setting the root node to contain the genesis block
 
-            self.stubborn_block_node_map = {}
-            if self.stubborn:
-                self.stubborn_block_node_map["000000000000"] = self.stubborn_block_tree_root
+            self.selfish_block_node_map = {}
+            if self.selfish:
+                self.selfish_block_node_map["000000000000"] = self.selfish_block_tree_root
 
 
             file = open("peer %d"%(self.p_id), "w")
@@ -241,17 +241,17 @@ class P2P(object):
 
             return is_longest
 
-        # inserts a block node to the stubborn block chain tree of this peer and returns if it is was added to the single current longest chain or
-        def stubborn_tree_insert(self, b_id, time):
+        # inserts a block node to the selfish block chain tree of this peer and returns if it is was added to the single current longest chain or
+        def selfish_tree_insert(self, b_id, time):
             prev_b_id = self.p2p.block_map[b_id].prev_b_id # bid of the block to which thid block has to be attached
             miner = self.p2p.block_map[b_id].miner # pid of the miner of this block
 
             # adding the block to the tree structure for visualization
             node_val = "(b_id: %s, time: %f)" % (b_id, time)
-            self.p2p.stubborn_visual_trees[self.p_id-1].create_node(node_val, b_id, parent=prev_b_id, data=CompressNode())
+            self.p2p.selfish_visual_trees[self.p_id-1].create_node(node_val, b_id, parent=prev_b_id, data=CompressNode())
 
             is_longest = False # true if the addition of this block creates the longest chain
-            parent_block_node = self.stubborn_block_node_map[prev_b_id]
+            parent_block_node = self.selfish_block_node_map[prev_b_id]
             block_tree_node = self.p2p.BlockTree(b_id, parent_block_node.length+1, self)
 
             # updating the balance accounts for the chain of the block tree to which this node was inserted
@@ -266,17 +266,17 @@ class P2P(object):
             # adding mining fee
             block_tree_node.accounts[miner-1] += 50
 
-            self.stubborn_block_node_map[b_id] = block_tree_node
+            self.selfish_block_node_map[b_id] = block_tree_node
             # add the block to the children of its previous block
             parent_block_node.children.append(block_tree_node)
 
-            longest_length = self.stubborn_block_node_map[self.stubborn_longest[0]].length # length of the longest chain in the tree
+            longest_length = self.selfish_block_node_map[self.selfish_longest[0]].length # length of the longest chain in the tree
             if longest_length < block_tree_node.length:
-                self.stubborn_longest = [b_id] # updated the longest chains list if new longest chain formed
+                self.selfish_longest = [b_id] # updated the longest chains list if new longest chain formed
                 is_longest = True # set if the new block creates the longest chain
             # !! to be deleted ?
             if longest_length == block_tree_node.length:
-                self.stubborn_longest.append(b_id)
+                self.selfish_longest.append(b_id)
             # !!
 
             file = open("peer %d"%(self.p_id), "a")
@@ -339,7 +339,7 @@ class P2P(object):
                         self.p2p.peers[i].add_event(delay, event)
 
         def receive_block(self, b_id, time, sender):
-            # add immediate self receive_alert if a stubborn one receives a verified honest block
+            # add immediate self receive_alert if a selfish one receives a verified honest block
             block = self.p2p.block_map[b_id]
 
             if not block.hidden:
@@ -360,14 +360,14 @@ class P2P(object):
                           (self.p_id, b_id, time, sender))
 
                 if self.verify_block(b_id, time): # if block is verified
-                    if self.stubborn and not self.p2p.peers[block.miner-1].stubborn:
+                    if self.selfish and not self.p2p.peers[block.miner-1].selfish:
                         # print("pid: %d received a block by honest miner %d"%(self.p_id, block.miner))
-                        lead = self.stubborn_block_node_map[self.stubborn_longest[0]].length - self.block_node_map[self.longest[0]].length         
+                        lead = self.selfish_block_node_map[self.selfish_longest[0]].length - self.block_node_map[self.longest[0]].length         
                         self.receive_alert(-1, time, b_id, lead, 0)
-                        # print(self.stubborn_block_node_map)
+                        # print(self.selfish_block_node_map)
                         # print()
 
-                    if not self.stubborn:
+                    if not self.selfish:
                         # remove block txns from pending list
                         for txn in self.p2p.block_map[b_id].txns:
                             self.rem_txn(txn)
@@ -387,18 +387,18 @@ class P2P(object):
                             delay = time+(self.p2p.adj_mat[self.p_id-1][i]+(blk_size/cij)+np.random.exponential(96/cij))
                             self.p2p.peers[i].add_event(delay, event)
                     # start mining if longest chain formed for an honest miner
-                    if is_longest and not self.stubborn:
+                    if is_longest and not self.selfish:
                         self.create_block(time)
                 else:
                     if self.p2p.check2 and b_id.startswith("000004"):
                         print("INVALID BLOCK!!")
                     pass
             else:
-                if not self.stubborn:
+                if not self.selfish:
                     return
                 # check if parent exists, return false otherwise
                 try:
-                    parent_block_node = self.stubborn_block_node_map[block.prev_b_id]
+                    parent_block_node = self.selfish_block_node_map[block.prev_b_id]
                 except:
                     if self.p2p.check2 and b_id.startswith("000004"):
                         print("Previous block %s has not arrived at p_id: %d!"%(block.prev_b_id, self.p_id))
@@ -417,18 +417,18 @@ class P2P(object):
                     for txn in self.p2p.block_map[b_id].txns:
                         self.rem_txn(txn)
                     # insert the  block node into the tree              
-                    is_longest = self.stubborn_tree_insert(b_id, time)
+                    is_longest = self.selfish_tree_insert(b_id, time)
 
                     # forward the block to neighbours
                     for i in range(self.p2p.num_peers):
-                        if self.p2p.stubborn_adj_mat[self.p_id-1][i]>0 and i+1 != sender:
+                        if self.p2p.selfish_adj_mat[self.p_id-1][i]>0 and i+1 != sender:
                             event = self.p2p.Event("rblk", b_id, self.p_id)
                             if(self.p2p.peers[i].fast_slow==1 and self.fast_slow==1):
                                 cij = 100
                             else:
                                 cij = 5
                             blk_size = max(8*len(self.p2p.block_map[b_id].txns), 8)
-                            delay = time+(self.p2p.stubborn_adj_mat[self.p_id-1][i]+(blk_size/cij)+np.random.exponential(96/cij))
+                            delay = time+(self.p2p.selfish_adj_mat[self.p_id-1][i]+(blk_size/cij)+np.random.exponential(96/cij))
                             self.p2p.peers[i].add_event(delay, event)
                     # start mining if longest chain formed
                     if is_longest:
@@ -447,7 +447,7 @@ class P2P(object):
             if not block.hidden:
                 parent_block_node = self.block_node_map[block.prev_b_id]
             else:
-                parent_block_node = self.stubborn_block_node_map[block.prev_b_id]
+                parent_block_node = self.selfish_block_node_map[block.prev_b_id]
             pay_sum = [] # stores total amount payed by each peer in all txns in this block 
             for i in range(self.p2p.num_peers):
                 pay_sum.append(0)
@@ -485,12 +485,12 @@ class P2P(object):
                 ttxns = random.sample(self.pending_txs, MAX_BLK_SIZE)
 
             hidden = False
-            if not self.stubborn:
+            if not self.selfish:
                 prev_b_id = self.longest[0]
                 parent_block_node = self.block_node_map[prev_b_id]
             else:
-                prev_b_id= self.stubborn_longest[0]
-                parent_block_node = self.stubborn_block_node_map[prev_b_id]
+                prev_b_id= self.selfish_longest[0]
+                parent_block_node = self.selfish_block_node_map[prev_b_id]
                 hidden = True
 
             # filtering out invalid txns
@@ -533,16 +533,16 @@ class P2P(object):
             current_block = self.p2p.block_map[b_id]
 
             longest = self.longest[0]
-            if hide and self.stubborn:
-                longest = self.stubborn_longest[0]
+            if hide and self.selfish:
+                longest = self.selfish_longest[0]
 
-            if (self.stubborn and not hide) or longest == current_block.prev_b_id:
+            if (self.selfish and not hide) or longest == current_block.prev_b_id:
                 if self.p2p.check2 and b_id.startswith("000004"):
                     print("pID: %d %s broadcasted BlkID: %s at time %f" % (
                         self.p_id, "hide" if hide else "public", b_id, time))
 
                 # receive own block
-                self.p2p.block_map[b_id].hidden = hide and self.stubborn
+                self.p2p.block_map[b_id].hidden = hide and self.selfish
                 self.receive_block(b_id, time, self.p_id)
             else:
                 if self.p2p.check2 and b_id.startswith("000004"):
@@ -552,7 +552,7 @@ class P2P(object):
         def destroy_tree(self, block_tree_node):
             for child in block_tree_node.children:
                 self.destroy_tree(child)
-            old_tree_node = self.stubborn_block_node_map.pop(block_tree_node.b_id)
+            old_tree_node = self.selfish_block_node_map.pop(block_tree_node.b_id)
             del old_tree_node
 
         def clean_up(self, block_tree_node):
@@ -562,13 +562,13 @@ class P2P(object):
 
 
         def find_earliest_block(self):
-            for child in self.stubborn_block_tree_root.children:
+            for child in self.selfish_block_tree_root.children:
                 if self.contains_longest(child):
                     return child.b_id
             return -1
 
         def contains_longest(self, block_tree_node):
-            if block_tree_node.b_id in self.stubborn_longest:
+            if block_tree_node.b_id in self.selfish_longest:
                 return True
             for child in block_tree_node.children:
                 if self.contains_longest(child):
@@ -579,11 +579,11 @@ class P2P(object):
 
         def send_alert(self, sender, time, b_id):
             for i in range(self.p2p.num_peers):
-                if self.p2p.stubborn_adj_mat[self.p_id-1][i]>0 and i+1 != sender:
+                if self.p2p.selfish_adj_mat[self.p_id-1][i]>0 and i+1 != sender:
                     event = self.p2p.Event("ralt", b_id, self.p_id)
                     cij = 100
                     msg_size = 0
-                    delay = time+(self.p2p.stubborn_adj_mat[self.p_id-1][i]+(msg_size/cij)+np.random.exponential(96/cij))
+                    delay = time+(self.p2p.selfish_adj_mat[self.p_id-1][i]+(msg_size/cij)+np.random.exponential(96/cij))
                     self.p2p.peers[i].add_event(delay, event)
 
 
@@ -596,47 +596,47 @@ class P2P(object):
             earliest_common_block_id = self.find_earliest_block()
             # print("received an alert from pid: %d ecb is: %s"%(sender, earliest_common_block_id))
             if earliest_common_block_id == -1:
-                self.destroy_tree(self.stubborn_block_tree_root)
-                self.stubborn_block_tree_root = self.p2p.BlockTree(self.longest[0], 1, self)
+                self.destroy_tree(self.selfish_block_tree_root)
+                self.selfish_block_tree_root = self.p2p.BlockTree(self.longest[0], 1, self)
                 for peer_num in range(self.p2p.num_peers):
-                    self.stubborn_block_tree_root.accounts.append(0)
-                self.stubborn_block_node_map[self.longest[0]] = self.stubborn_block_tree_root
-                self.stubborn_longest = [self.longest[0]]
-                self.p2p.stubborn_visual_trees[self.p_id-1] = Tree()
-                self.p2p.stubborn_visual_trees[self.p_id-1].create_node("(b_id: %s, time: %f)"%(self.longest[0], time), self.longest[0], data=CompressNode())
+                    self.selfish_block_tree_root.accounts.append(0)
+                self.selfish_block_node_map[self.longest[0]] = self.selfish_block_tree_root
+                self.selfish_longest = [self.longest[0]]
+                self.p2p.selfish_visual_trees[self.p_id-1] = Tree()
+                self.p2p.selfish_visual_trees[self.p_id-1].create_node("(b_id: %s, time: %f)"%(self.longest[0], time), self.longest[0], data=CompressNode())
                 print("p_id: %d    time: %f"%(self.p_id, time))
-                self.p2p.stubborn_visual_trees[self.p_id-1].show()
+                self.p2p.selfish_visual_trees[self.p_id-1].show()
                 return
             #if lead==2:
 
             self.broadcast_block(earliest_common_block_id, time, False)
-            for child in self.stubborn_block_tree_root.children:
+            for child in self.selfish_block_tree_root.children:
                 if child.b_id != earliest_common_block_id:
                     # destroy the "non-longest" chains
                     self.destroy_tree(child)
-            old_stubborn_tree_root = self.stubborn_block_node_map.pop(self.stubborn_block_tree_root.b_id)
-            del old_stubborn_tree_root
-            self.stubborn_block_tree_root = self.stubborn_block_node_map[earliest_common_block_id]
+            old_selfish_tree_root = self.selfish_block_node_map.pop(self.selfish_block_tree_root.b_id)
+            del old_selfish_tree_root
+            self.selfish_block_tree_root = self.selfish_block_node_map[earliest_common_block_id]
             # clean up - update all branch lengths
-            self.clean_up(self.stubborn_block_tree_root)
+            self.clean_up(self.selfish_block_tree_root)
             # and remove all the invalid "longest" block nodes
             remove_list = []
-            for b_id in self.stubborn_longest:
+            for b_id in self.selfish_longest:
                 try:
-                    block_tree_node = self.stubborn_block_node_map[b_id]
+                    block_tree_node = self.selfish_block_node_map[b_id]
                 except:
                     remove_list.append(b_id)
             for rem_id in remove_list:
-                self.stubborn_longest.remove(rem_id)
+                self.selfish_longest.remove(rem_id)
 
             if lead==2:
                 self.receive_alert(sender, time, b_id, lead, count+1)
 
 
             #if lead!=2:
-            self.p2p.stubborn_visual_trees[self.p_id-1] = self.p2p.stubborn_visual_trees[self.p_id-1].subtree(earliest_common_block_id)
+            self.p2p.selfish_visual_trees[self.p_id-1] = self.p2p.selfish_visual_trees[self.p_id-1].subtree(earliest_common_block_id)
             print("p_id: %d    time: %f"%(self.p_id, time))
-            self.p2p.stubborn_visual_trees[self.p_id-1].show() 
+            self.p2p.selfish_visual_trees[self.p_id-1].show() 
             # add logic for setting and changing the eraliest_common...
             # and removing the broadcasted block from the hidden blocks
             # add logic for scheduling alert related events
@@ -663,7 +663,7 @@ class P2P(object):
                 if(event.type == "bblk"):
                     self.broadcast_block(event.data, event_time, True)
                 if(event.type == "ralt"):
-                    lead = self.stubborn_block_node_map[self.stubborn_longest[0]].length - self.block_node_map[self.longest[0]].length
+                    lead = self.selfish_block_node_map[self.selfish_longest[0]].length - self.block_node_map[self.longest[0]].length
                     self.receive_alert(event.sender, event_time, event.data, lead, 0)
                 if(event.type == "salt"):
                     self.send_alert(event.sender, event_time, event.data)
@@ -708,7 +708,7 @@ class P2P(object):
             self.vertices_dict = {}
             self.num_vertices = 0
             self.adj_matrix = None
-            self.stubborn_adj_matrix = None
+            self.selfish_adj_matrix = None
             self.p2p = p2p
             self.num_edges = 0
             self.in_graph = set()
@@ -742,7 +742,7 @@ class P2P(object):
         # creates a connected graph of peers in which each peer is connected to a random number of peers
         def generate_random_graph(self):
             self.adj_matrix = np.zeros(shape=(self.num_vertices, self.num_vertices), dtype=np.int32)
-            self.stubborn_adj_matrix = np.zeros(shape=np.shape(self.adj_matrix))
+            self.selfish_adj_matrix = np.zeros(shape=np.shape(self.adj_matrix))
             cg = np.eye(self.num_vertices, dtype=np.int32)
             con = np.ones(shape=(self.num_vertices, self.num_vertices), dtype=np.int32)
             while not ((cg == con).all()):
@@ -764,9 +764,9 @@ class P2P(object):
                         pxy = np.random.uniform(10, 500)
                         self.adj_matrix[i][j] = pxy
                         self.adj_matrix[j][i] = pxy
-                        if self.p2p.peers[i].stubborn and self.p2p.peers[j].stubborn:
-                            self.stubborn_adj_matrix[i][j] = pxy
-                            self.stubborn_adj_matrix[j][i] = pxy
+                        if self.p2p.peers[i].selfish and self.p2p.peers[j].selfish:
+                            self.selfish_adj_matrix[i][j] = pxy
+                            self.selfish_adj_matrix[j][i] = pxy
 
             for i in range(self.num_vertices):
                 for j in range(i+1, self.num_vertices):
@@ -776,10 +776,10 @@ class P2P(object):
                             pxy = np.random.uniform(10, 500)
                             self.adj_matrix[i][j] = pxy
                             self.adj_matrix[j][i] = pxy
-                            if self.p2p.peers[i].stubborn and self.p2p.peers[j].stubborn:
-                                self.stubborn_adj_matrix[i][j] = pxy
-                                self.stubborn_adj_matrix[j][i] = pxy
-            return self.adj_matrix, self.stubborn_adj_matrix
+                            if self.p2p.peers[i].selfish and self.p2p.peers[j].selfish:
+                                self.selfish_adj_matrix[i][j] = pxy
+                                self.selfish_adj_matrix[j][i] = pxy
+            return self.adj_matrix, self.selfish_adj_matrix
 
 
 # print("P2P simulation")
@@ -790,21 +790,21 @@ class P2P(object):
 # print("Enter number of peers: ", end="")
 # num_peers = int(input())
 
-# print("Enter number of stubborn peers: ", end="")
-# num_stubborn = int(input())
+# print("Enter number of selfish peers: ", end="")
+# num_selfish = int(input())
 
 # print("Enter Tx(mean inter-transaction gap) in milli seconds: ", end="")
 # Tx = int(input())
 
 # Tk = []
-# for i in range(num_peers-num_stubborn):
+# for i in range(num_peers-num_selfish):
 #     print("Enter Tk(mean POW time) for honest peer k = %d in milli seconds :"%(i+1), end="")
 #     Tk.append(int(input()))
 
-# Tk_stubborn = []
-# for i in range(num_stubborn):
-#     print("Enter Tk(mean POW time) for stubborn peer k = %d in milli seconds :"%(i+1), end="")
-#     Tk_stubborn.append(int(input()))
+# Tk_selfish = []
+# for i in range(num_selfish):
+#     print("Enter Tk(mean POW time) for selfish peer k = %d in milli seconds :"%(i+1), end="")
+#     Tk_selfish.append(int(input()))
 
 # print("Track txn generation, loopless forwarding and latencies?: (Y/N)", end="")
 # check1 = input()
@@ -816,16 +816,16 @@ class P2P(object):
 # if check2=="Y":
 #     print("Will follow BlkID 000001000001")
 
-# p2p = P2P(num_peers, Tx, Tk, Tk_stubborn, num_stubborn)
+# p2p = P2P(num_peers, Tx, Tk, Tk_selfish, num_selfish)
 # p2p.run(sim_time, check1=="Y", check2=="Y")
 
 Tk = [900, 1300]
-Tk_stubborn = [300, 700]
-p2p = P2P(4, 100, Tk, Tk_stubborn, 2)
+Tk_selfish = [300, 700]
+p2p = P2P(4, 100, Tk, Tk_selfish, 2)
 p2p.run(5000, False, False)
 
 for i in range(p2p.num_peers):
-    print("View the hidden and common blockchain trees for %s peer %d? (Y/N)"%("stubborn" if p2p.peers[i].stubborn else "honest", i+1))
+    print("View the hidden and common blockchain trees for %s peer %d? (Y/N)"%("selfish" if p2p.peers[i].selfish else "honest", i+1))
     response = input()
     if response=="Y":
         print("Compress? (Y/N)")
@@ -834,9 +834,9 @@ for i in range(p2p.num_peers):
             print("common tree : \n")
             p2p.visual_trees[i].show(data_property="node")
             print("hidden tree : \n")
-            p2p.stubborn_visual_trees[i].show(data_property="node")
+            p2p.selfish_visual_trees[i].show(data_property="node")
         else:
             print("common tree : \n")
             p2p.visual_trees[i].show()
             print("hidden tree : \n")
-            p2p.stubborn_visual_trees[i].show()
+            p2p.selfish_visual_trees[i].show()
